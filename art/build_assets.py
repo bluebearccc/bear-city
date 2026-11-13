@@ -1,6 +1,6 @@
-# 一键生成 mods/kaiju/assets/：底座、8 楼位 ×（4 损坏级别 + 空地）、怪兽帧、特效图标与 manifest.json
-# 用法：python3 -I art/build_assets.py
-# 所有图片按 1 美术像素 = 1 逻辑像素绘制，导出时最近邻放大 2 倍（Retina 下 1 美术像素 = 2 设备像素）
+# Build mods/kaiju/assets/ in one go: plate, 8 slots x (4 damage levels + empty lot), monster frames, effect icons and manifest.json
+# Usage: python3 -I art/build_assets.py
+# Everything is drawn at 1 art pixel = 1 logical pixel and exported 2x nearest-neighbor (1 art pixel = 2 device pixels on Retina)
 import colorsys, json, os, shutil, subprocess, sys, tempfile
 import numpy as np
 from PIL import Image
@@ -13,7 +13,7 @@ import render as R
 OUT = os.path.join(ROOT, "mods", "kaiju", "assets")
 SAMPLES = os.path.join(ART, "samples")
 MODES = ("day", "night")
-FRAMES = ("idle", "walk", "smash", "roar", "wave")   # 与 AI 动作表从左到右的顺序一致
+FRAMES = ("idle", "walk", "smash", "roar", "wave")   # same left-to-right order as the AI sprite sheet
 SPRITE_H = 60
 
 def save2x(arr_or_img, path, k=2):
@@ -29,12 +29,12 @@ def bbox(arr):
     ys, xs = np.where(arr[:, :, 3] > 0)
     return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
 
-# ---------- 怪兽站位 ----------
-# 每栋楼自动挑 2 个站位，怪兽和楼按真实前后关系叠放（挡在前面的楼会遮住怪兽一部分，怪兽脚踏实地）
-#   挑选：离自家楼近、少被前面的楼遮挡（头要露出来）、少挡住自家楼、站在楼前方，彼此拉开距离
-#   每个站位给一个排序深度：在所有「挡住它的楼」之前、所有「被它挡住的楼」之后
-MON_W, MON_H = 36, 56     # 怪兽身体在画面上的大致范围（脚底中点向上）
-STAND_MAX = 4             # 每栋楼最多几个站位（同楼第 5 只起才会叠在一起）
+# ---------- Monster stands ----------
+# Pick 2 stands per building automatically; monsters and buildings stack by real depth (a front building can hide part of a monster, feet on the ground)
+#   criteria: close to its building, little hidden by front buildings (head visible), not covering its building much, in front of it, spaced apart
+#   each stand gets a sort depth: before every building that hides it, after every building it hides
+MON_W, MON_H = 36, 56     # rough monster body box on screen (up from the foot midpoint)
+STAND_MAX = 4             # max stands per building (the 5th monster on one building starts overlapping)
 
 def slot_depth(k):
     x, y, w, d = R.SLOTS[k][:4]
@@ -48,7 +48,7 @@ def pick_stands(layers):
         return any(x - m <= px < x + w + m and y - m <= py < y + d + m for (x, y, w, d) in foot)
 
     def front_of(sx, sy, k):
-        # 楼 k 挡在点前面：点在楼远角的后方
+        # building k is in front of the point: the point is behind its far corner
         x, y, w, d = foot[k]
         return sx < x + w and sy < y + d
 
@@ -65,7 +65,7 @@ def pick_stands(layers):
     own_total = [max(1, int((layers[(k, 0)][:, :, 3] > 0).sum())) for k in range(len(foot))]
     chosen = []
     out = [None] * len(foot)
-    # 后排楼先挑（可选位置少），前排楼后挑
+    # back-row buildings pick first (fewer options), front-row ones later
     for k in sorted(range(len(foot)), key=slot_depth):
         x, y, w, d = foot[k]
         mine = []
@@ -75,7 +75,7 @@ def pick_stands(layers):
                 for sy in range(y - reach, y + d + reach + 1, 2):
                     if not (4 <= sx <= S - 4 and 4 <= sy <= S - 4) or inside(sx, sy):
                         continue
-                    if R.wx0 <= sx < S - 40 and sy >= R.wy0 - 4:      # 海
+                    if R.wx0 <= sx < S - 40 and sy >= R.wy0 - 4:      # sea
                         continue
                     dd = dist(sx, sy, k)
                     if dd > reach:
@@ -83,7 +83,7 @@ def pick_stands(layers):
                     hid = cover(sx, sy, [q for q in range(len(foot)) if front_of(sx, sy, q)])
                     if hid > tol:
                         continue
-                    # 挡住自家楼的比例：超过 1/4 才罚，挡得越多罚得越重（矮楼别被自家怪兽整栋挡住）
+                    # share of its own building covered: penalized above 1/4, more for more (a short building shouldn't vanish behind its monster)
                     own = 0 if front_of(sx, sy, k) else cover(sx, sy, [k]) / own_total[k]
                     if own > 0.4:
                         continue
@@ -93,8 +93,8 @@ def pick_stands(layers):
             cands.sort()
             mine = []
             for _, px, py, sx, sy in cands:
-                # 同一栋楼的两个站位间隔 ≥ 30，和别的楼的站位间隔 ≥ 24
-                # 第 3、4 个站位要挨着第一个（不跑到别的楼那边去）
+                # stands of the same building >= 30 apart, >= 24 from other buildings' stands
+                # the 3rd and 4th stands stay near the first (not over by another building)
                 if len(mine) >= 2 and abs(px - mine[0][0]) + abs(py - mine[0][1]) > 50:
                     continue
                 if all(abs(px - qx) + abs(py - qy) >= 30 for qx, qy, *_ in mine) and \
@@ -104,24 +104,24 @@ def pick_stands(layers):
                     break
             if len(mine) >= 2:
                 break
-        assert len(mine) >= 2, f"楼位 {k} 找不到 2 个站位"
+        assert len(mine) >= 2, f"slot {k}: could not find 2 stands"
         chosen += mine
         res = []
         for px, py, sx, sy in mine:
-            # 只有画面上和怪兽重叠的楼才约束前后：挡住它的楼要在它之后画，被它挡住的楼在它之前画
+            # only buildings overlapping the monster on screen constrain order: ones hiding it draw after, ones it hides draw before
             near = [q for q in range(len(foot)) if cover(sx, sy, [q]) > 0]
             ahead = [slot_depth(q) for q in near if front_of(sx, sy, q)]
             behind = [slot_depth(q) for q in near if not front_of(sx, sy, q)]
             lo = max(behind, default=-1e9)
             hi = min(ahead, default=1e9)
-            assert lo < hi, f"楼位 {k} 站位 ({sx},{sy}) 前后关系冲突：要在 {lo} 之后、{hi} 之前"
-            # 没约束时用世界坐标 x+y（和楼的 depth 同一尺度），再夹进约束区间
+            assert lo < hi, f"slot {k} stand ({sx},{sy}) depth conflict: must be after {lo} and before {hi}"
+            # unconstrained: use world x+y (same scale as building depth), then clamp into the allowed range
             dep = min(max(sx + sy, lo + 0.01), hi - 0.01)
             res.append((px, py, round(dep, 2)))
         out[k] = res
     return out
 
-# ---------- 城市图层 ----------
+# ---------- City layers ----------
 def build_city(mode, manifest):
     R.reset(mode)
     R.draw_plate()
@@ -149,7 +149,7 @@ def build_city(mode, manifest):
             manifest["slots"].append({
                 "i": i, "color": color,
                 "roof": {"x": round(cx), "y": y0},
-                # 各损坏级别的实际楼顶 y（箭头、警报灯跟着楼高走）
+                # actual roof y per damage level (arrow and siren follow the height)
                 "roofs": [bbox(layers[(i, k)])[1] for k in range(4)],
                 "stand": stands,
                 "hit": {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0},
@@ -161,9 +161,9 @@ def build_city(mode, manifest):
         manifest["entry"] = {"x": round(px), "y": round(py), "depth": ex + ey}
     return layers
 
-# ---------- 怪兽 ----------
+# ---------- Monsters ----------
 def is_glow(rgb):
-    # 夜晚发光像素：青色系，且高饱和，或中饱和但很亮（巨蜥背鳍、机甲面罩）
+    # night glow pixels: cyan hues, highly saturated, or medium saturation but very bright (lizard back spikes, mech visor)
     h, s, v = colorsys.rgb_to_hsv(*(np.asarray(rgb) / 255.0))
     return 170 <= h * 360 <= 205 and (s > 0.5 or (s > 0.25 and v > 0.8))
 
@@ -183,13 +183,13 @@ def pixelize(sheet):
     subprocess.run([sys.executable, "-I", os.path.join(ART, "pixelize.py"), os.path.join(ROOT, sheet), tmp, str(SPRITE_H), "--poses", str(len(FRAMES))],
                    check=True, capture_output=True)
     n = len([f for f in os.listdir(tmp) if f.startswith("frame")])
-    assert n == len(FRAMES), f"{sheet}: 切出 {n} 个姿势，应为 {len(FRAMES)}"
+    assert n == len(FRAMES), f"{sheet}: cut {n} poses, expected {len(FRAMES)}"
     frames = [np.asarray(Image.open(f"{tmp}/frame{k}.png").convert("RGBA")) for k in range(len(FRAMES))]
     shutil.rmtree(tmp)
     return dict(zip(FRAMES, frames))
 
 def in_box(arr, bw, bh):
-    # 放进统一画布：脚底中点对齐画布底边中点
+    # place on a shared canvas: foot midpoint at the bottom-center
     box = np.zeros((bh, bw, 4), dtype=np.uint8)
     fh, fw = arr.shape[:2]
     left = (bw - fw) // 2
@@ -197,7 +197,7 @@ def in_box(arr, bw, bh):
     return box
 
 def face_center(arr):
-    # 五官中心：帧上 70% 里、轮廓内部（四邻都不透明）的很深像素 = 眼睛、嘴；找不到返回 None
+    # face center: very dark pixels inside the outline (all 4 neighbors opaque) in the top 70% of the frame = eyes, mouth; None if not found
     top = arr[:round(arr.shape[0] * 0.7)]
     a = top[:, :, 3] > 0
     inner = np.zeros_like(a)
@@ -209,11 +209,11 @@ def face_center(arr):
     return int(round(xs.mean())), int(round(ys.mean()))
 
 def head_crop(arr, size):
-    # 头部：按五官中心裁 size×size（背刺、翅膀不会把脸挤出框；弯腰的拆楼帧也能裁到脸）
+    # head: crop size x size around the face center (spikes and wings don't push the face out; works for the bent smash frame too)
     x0, y0, x1, y1 = bbox(arr)
     fc = face_center(arr)
     cx, cy = fc if fc else ((x0 + x1) // 2, y0 + size // 2)
-    # 五官放在框里偏下一点（上面留给头顶），框不超出角色轮廓
+    # put the face a bit low in the box (room for the top of the head), box stays inside the character
     left = min(max(cx - size // 2, x0), max(x0, x1 - size))
     top = min(max(cy - size * 9 // 16, y0), max(y0, y1 - size))
     box = np.zeros((size, size, 4), dtype=np.uint8)
@@ -237,15 +237,15 @@ def build_monsters(manifest):
         for mode in MODES:
             conv = (lambda a: a) if mode == "day" else to_night
             for k in FRAMES:
-                img = conv(fr[k])   # 夜景逐像素转换较慢，每帧只算一次
+                img = conv(fr[k])   # night conversion is per-pixel and slow, do it once per frame
                 save2x(in_box(img, bw, bh), f"{OUT}/{mode}/monsters/{mid}/{k}.png")
-                # 头像 48×48 原尺寸保存：按 24 逻辑像素显示时 1 美术像素 = 1 设备像素
+                # heads saved at 48x48: shown at 24 logical px, 1 art pixel = 1 device pixel
                 save1x(Image.fromarray(head_crop(img, 48), "RGBA"), f"{OUT}/{mode}/monsters/{mid}/head-{k}.png")
-                # 名册大头像：和快讯同样 32×32 紧裁（脸撑满），3 倍导出 96px，按 48 逻辑像素显示
+                # roster avatars: tight 32x32 crop like the news face, exported 3x at 96px, shown at 48 logical px
                 save2x(head_crop(img, 32), f"{OUT}/{mode}/monsters/{mid}/avatar-{k}.png", 3)
                 if k == "roar":
                     roar = img
-            # 快讯大头像：咆哮帧头部 32×32，2 倍导出，按 32 逻辑像素显示
+            # news face: 32x32 head from the roar frame, exported 2x, shown at 32 logical px
             save2x(head_crop(roar, 32), f"{OUT}/{mode}/monsters/{mid}/face-roar.png")
             if mode == "day":
                 sprites[mid] = {k: in_box(fr[k], bw, bh) for k in FRAMES}
@@ -259,7 +259,7 @@ def build_monsters(manifest):
         manifest["monsters"].append(entry)
     return sprites
 
-# ---------- 特效图标（字符画） ----------
+# ---------- Effect icons (ASCII art) ----------
 FX = {
     "arrow": ("""
 ..KKKKK..
@@ -322,7 +322,7 @@ KKKKKKKKKKKK
 KBBBBBKBBBBK
 KBBBBBKBBBBK
 KKKKKKKKKKKK""", {"K": "#6b3524", "B": "#d9673f"}),
-    # 档案卡照片上的回形针
+    # paper clip on the dossier photo
     "clip": ("""
 .KKKK.
 KSSSSK
@@ -364,10 +364,10 @@ def build_fx(mode, manifest):
     sizes["dust"] = [dust.shape[1], dust.shape[0]]
     if mode == "day":
         manifest["fx"] = {k: f"fx/{k}.png" for k in sizes}
-        # 1 倍逻辑尺寸 [宽, 高]
+        # 1x logical size [w, h]
         manifest["fxSize"] = sizes
 
-# ---------- 检查 ----------
+# ---------- Checks ----------
 def verify(manifest):
     names = ["plate.png"]
     for s in manifest["slots"]:
@@ -379,19 +379,19 @@ def verify(manifest):
     for mode in MODES:
         for n in names:
             p = f"{OUT}/{mode}/{n}"
-            assert os.path.exists(p), f"缺文件 {p}"
+            assert os.path.exists(p), f"missing file {p}"
             w, h = Image.open(p).size
-            assert w % 2 == 0 and h % 2 == 0, f"尺寸不是 2 的整数倍 {p} {w}×{h}"
+            assert w % 2 == 0 and h % 2 == 0, f"size is not a multiple of 2 {p} {w}x{h}"
             if n == "plate.png" or n.startswith("slot"):
-                assert (w, h) == (cw, ch), f"图层尺寸不对 {p} {w}×{h}"
+                assert (w, h) == (cw, ch), f"wrong layer size {p} {w}x{h}"
     return len(names) * len(MODES)
 
 def check_image(manifest, layers, sprites):
-    # 合成检查图：底座 + 全部楼（按 depth）+ 怪兽各就各位；再附一条橙楼损坏级别对照
+    # check image: plate + all buildings (by depth) + monsters on their stands; plus a strip of the orange building's damage levels
     slots = manifest["slots"]
     sp = manifest["sprite"]
     ids = [m["id"] for m in manifest["monsters"]]
-    actors = [  # (站位, 图像)
+    actors = [  # (stand, image)
         (slots[1]["stand"][0], sprites[ids[0]]["smash"]),
         (slots[1]["stand"][1], sprites[ids[1 % len(ids)]]["wave"]),
         (slots[2]["stand"][0], sprites[ids[1 % len(ids)]]["roar"]),
@@ -406,7 +406,7 @@ def check_image(manifest, layers, sprites):
         layer = Image.new("RGBA", (R.W, R.H), (0, 0, 0, 0))
         layer.alpha_composite(Image.fromarray(img), (pos["x"] - sp["ax"], pos["y"] - sp["ay"]))
         items.append((pos["depth"], layer))
-    # 楼和怪兽按 depth 统一从后往前叠（与 city.js 一致）
+    # buildings and monsters stacked back to front by depth (same as city.js)
     items = [(d, 0, img) for d, img in items[:len(slots)]] + [(d, 1, img) for d, img in items[len(slots):]]
     for _, _, img in sorted(items, key=lambda t: (t[0], t[1])):
         canvas.alpha_composite(img)
@@ -434,12 +434,12 @@ def main():
     sprites = build_monsters(manifest)
     with open(f"{OUT}/manifest.json", "w") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)
-    # mod 里同步 import 用的同一份数据
+    # same data for the mod's synchronous import
     with open(os.path.join(ROOT, "mods", "kaiju", "manifest.js"), "w") as f:
-        f.write("// 由 art/build_assets.py 生成，勿手改\nexport default " + json.dumps(manifest, ensure_ascii=False) + ";\n")
+        f.write("// Generated by art/build_assets.py, do not edit by hand\nexport default " + json.dumps(manifest, ensure_ascii=False) + ";\n")
     n = verify(manifest)
     check_image(manifest, day_layers, sprites)
-    print(f"ok: {n} 张素材，{len(manifest['slots'])} 楼位，{len(manifest['monsters'])} 只怪兽 → {OUT}")
+    print(f"ok: {n} assets, {len(manifest['slots'])} slots, {len(manifest['monsters'])} monsters -> {OUT}")
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,6 @@
-// 怪兽名册：按 space 分组，每个 Agent 一张「机密档案夹」式怪兽档案卡，两列排
-//   编号标签、回形针照片、代号 / 程序 / 驻地 / 任务 / 状况 / 损坏 / 战绩、状态印章、像素硬阴影
-// 侧栏收起（< 160px）时改画窄栏：每个 space 一块小楼图标 + 状态灯
+// Monster roster: grouped by space, one "classified folder" dossier card per agent, two per row
+//   number tab, paper-clipped photo, Name / App / Base / Task / Now / Dmg / Score, status stamp, hard pixel shadow
+// Collapsed sidebar (< 160px) draws a rail: one building icon + status light per space
 import { div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, agents, run, openOverlay, window, layout, shared, setShared, props } from "herdr";
@@ -10,8 +10,8 @@ import { asset, assign, monsterOf, slotOf, slotColor, isNight, shadowColor, FACE
 export const WIDE = 400;
 export const RAIL = 76;
 
-// 状态 → 头像表情帧
-// 状态徽章颜色（像素风纯色块）
+// Status -> face frame
+// Status badge colors (flat pixel blocks)
 export const BADGE = { working: "#e07a3c", done: "#d9573f", blocked: "#d8a548" };
 
 const hotkey = (i) => (i < 9 ? `⌃${i + 1}` : "");
@@ -19,7 +19,7 @@ const stop = (_e, cx) => cx.stop_propagation();
 
 export const sidebarOpen = () => (find(layout(), "sidebar")?.size?.px ?? WIDE) >= 160;
 
-// cmd-b：侧栏 400 ↔ 76，收起时隐藏沙盘块
+// cmd-b: sidebar 400 <-> 76, hides the city when collapsed
 export function toggleSidebar() {
   if (sidebarOpen()) {
     run("layout.hide", { id: "city" });
@@ -35,7 +35,7 @@ const spaceMenu = (s) => (_e, cx) => {
   openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: s.id } } });
 };
 
-// 楼色小楼图标：楼身 + 2×2 像素窗
+// Small building icon in the building color: body + 2x2 pixel windows
 export function miniBuilding(color, size) {
   const w = Math.round(size * 0.55);
   const h = size;
@@ -51,36 +51,36 @@ function statusLight(t, status) {
   return d;
 }
 
-const DAMAGE = ["完好", "轻损", "重损", "废墟"];
+const DAMAGE = ["Intact", "Light", "Heavy", "Ruin"];
 
-// 「3 分钟」「1 小时 5 分」「刚刚」
+// "3 min", "1 h 5 min", "just now"
 function ago(ms) {
   const m = Math.floor(ms / 60000);
-  if (m < 1) return "刚刚";
-  if (m < 60) return `${m} 分钟`;
-  return `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
-// 计时文字：拆楼按开始干活算，等你 / 拆完了按状态变化时间算；睡觉中不显示
+// Timer text: smashing counts from work start, waiting / razed from the status change; nothing when asleep
 function timer(a, tab, now) {
   if (a.status === "working" && tab?.working_since) {
     const d = ago(now - tab.working_since);
-    return d === "刚刚" ? "刚开拆" : `拆了 ${d}`;
+    return d === "just now" ? "just started" : `smashing for ${d}`;
   }
   if ((a.status === "blocked" || a.status === "done") && tab?.changed_at) {
     const d = ago(now - tab.changed_at);
-    if (a.status === "blocked") return d === "刚刚" ? "刚开始等" : `等了 ${d}`;
-    return d === "刚刚" ? "刚拆完" : `${d}前拆完`;
+    if (a.status === "blocked") return d === "just now" ? "just started waiting" : `waiting for ${d}`;
+    return d === "just now" ? "just razed" : `razed ${d} ago`;
   }
   return "";
 }
 
 const progName = (a) => a.program?.name ?? a.app ?? "Agent";
 
-// 正在做什么：终端标题去掉图标符号和程序名 / space 名片段；只剩目录或为空时不显示
+// What it's doing: terminal title minus icons and program / space name parts; hidden when only a folder or empty
 function task(a) {
   const same = [progName(a), a.app, a.space_name].filter(Boolean).map((x) => x.toLowerCase());
-  // 按分隔符拆开，去掉程序名 / space 名片段和单个字符（如 omp 的「π > space」）
+  // Split on separators, drop program / space name parts and single chars (like omp's "π > space")
   const parts = (a.title ?? "").split(/\s+[|｜>›»:]\s+/)
     .map((x) => x.replace(/^[^\p{L}\p{N}~/]+/u, "").trim())
     .filter((x) => x.length > 1 && !same.includes(x.toLowerCase()));
@@ -89,25 +89,25 @@ function task(a) {
   return raw;
 }
 
-// 在哪：有意义的 tab 名（不是默认编号、也不是程序名）；没有就用 space 名
+// Where: a meaningful tab name (not a default number or the program name); otherwise the space name
 function place(a) {
   const tab = a.tab_name ?? "";
   if (tab && !/^(tb)?\d+$/.test(tab) && tab.toLowerCase() !== progName(a).toLowerCase()) return tab;
   return a.space_name ?? "";
 }
 
-// 怪兽口吻的一句状态说明
+// One-line status quip in the monster's voice
 const QUIP = {
-  idle: "呼呼大睡，等你派活",
-  working: "正在啃这栋楼",
-  done: "拆完了！在废墟上咆哮",
-  blocked: "举着牌子等你回话",
+  idle: "Snoozing, waiting for orders",
+  working: "Chewing on this building",
+  done: "Razed! Roaring on the ruins",
+  blocked: "Holding up a sign for you",
 };
 
-// ---------- 战绩：累计拆楼次数 + 今天干活时长 ----------
-// 存在 shared("kaiju.stats")（会落盘，重启 Herdr 不清零）；只在状态变化时写
-//   拆楼次数：每干完一轮（working → done / idle）+1
-//   今天时长：working 的累计时间，跨天清零
+// ---------- Score: buildings razed + today's working time ----------
+// Stored in shared("kaiju.stats") (persisted, survives Herdr restarts); written only on status change
+//   razed: +1 per finished round of work (working -> done / idle)
+//   today: total working time, reset at midnight
 const STATS = "kaiju.stats";
 
 function trackStats(list, now) {
@@ -153,15 +153,15 @@ function workTime(v, now) {
   return v.ms + (v.status === "working" && v.start ? now - v.start : 0);
 }
 
-// 短写时长（档案卡一行放得下）：「1 时 5 分」「12 分」「<1 分」「0 分」
+// Short duration (fits one card line): "1h 5m", "12m", "<1m", "0m"
 function dur(ms) {
   const m = Math.floor(ms / 60000);
-  if (m < 1) return ms > 0 ? "<1 分" : "0 分";
-  if (m < 60) return `${m} 分`;
-  return `${Math.floor(m / 60)} 时 ${m % 60} 分`;
+  if (m < 1) return ms > 0 ? "<1m" : "0m";
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-// 4 格像素损坏条
+// 4-cell pixel damage bar
 function damageBar(t, lvl, P) {
   const fill = ["#5fae6e", "#d8a548", "#e07a3c", "#d9573f"][lvl];
   return h_flex().gap(4).items_center()
@@ -170,31 +170,31 @@ function damageBar(t, lvl, P) {
     .child(div().text_size(12).text_color(P.label).child(DAMAGE[lvl]));
 }
 
-// 48px 怪兽头像（随状态换表情），放在楼色淡底里；拆楼中轻轻抖（原生 loop）
+// 48px monster face (expression follows status) on a light building-color fill; shakes gently while smashing (native loop)
 function avatarBox(t, a, m, id) {
   let avatar = image(asset(t, m.avatars[FACE[a.status] ?? "idle"])).w(48).h(48);
   if (a.status === "working") avatar = div().id(id).relative().loop("left", { from: -1, to: 1, period: 220 }).child(avatar);
   return div().size(48).bg(`${slotColor(slotOf(a.space))}40`).overflow_hidden().child(avatar);
 }
 
-// 档案纸的配色（白天牛皮纸 / 夜晚深棕）；photo = 照片白边（夜里压暗，不刺眼）
+// Paper colors (kraft by day / dark brown by night); photo = photo border (dimmed at night)
 function paperOf(t) {
   return isNight(t)
     ? { paper: "#2b2721", tab: "#3a3328", line: "#5a4a35", ink: "#e9dcc0", label: "#a8987a", photo: "#b8ad98" }
     : { paper: "#f3e7c9", tab: "#e6d2a3", line: "#9c7b4e", ink: "#3b2f20", label: "#8a7350", photo: "#ffffff" };
 }
 
-// 状态印章：文字 + 颜色
+// Status stamp: text + color
 const STAMP = {
-  idle: ["睡觉中", "#8a8f99"],
-  working: ["拆楼中", "#e07a3c"],
-  done: ["拆完了", "#d9573f"],
-  blocked: ["等你", "#c99a1e"],
+  idle: ["ASLEEP", "#8a8f99"],
+  working: ["SMASHING", "#e07a3c"],
+  done: ["RAZED", "#d9573f"],
+  blocked: ["WAITING", "#c99a1e"],
 };
 
 export const CARD_W = 184;
 
-// 怪兽档案卡（机密档案夹）：顶部标签写编号；回形针别着照片；字段 代号 / 程序 / 驻地 / 任务 / 状况 / 损坏 / 战绩；状态是红框印章
+// Monster dossier card (classified folder): number on the top tab; paper-clipped photo; fields Name / App / Base / Task / Now / Dmg / Score; status as a framed stamp
 function card(t, a, mid, tab, now, dmg, stat, no) {
   const P = paperOf(t);
   const m = monsterOf(mid);
@@ -206,10 +206,10 @@ function card(t, a, mid, tab, now, dmg, stat, no) {
   const [stampText, stampColor] = STAMP[a.status] ?? STAMP.idle;
 
   const field = (label, value, color = P.ink) => h_flex().min_w(0).gap(4).items_center()
-    .child(div().w(28).flex_none().whitespace_nowrap().text_size(12).text_color(P.label).child(label))
+    .child(div().w(36).flex_none().whitespace_nowrap().text_size(12).text_color(P.label).child(label))
     .child(typeof value === "string" ? div().min_w(0).truncate().text_size(12).text_color(color).child(value) : value);
 
-  // 照片：白边相纸（1px 线 + 2px 白边）里正好放 48 头像，回形针别在左上
+  // Photo: white-bordered print (1px line + 2px border) holding the 48px face, paper clip top-left
   const [cw, ch] = M.fxSize.clip;
   const photo = div().relative().size(54).flex_none().bg(P.photo).border(1).border_color(P.line).p(2)
     .child(avatarBox(t, a, m, `ava-${a.address}`))
@@ -218,7 +218,7 @@ function card(t, a, mid, tab, now, dmg, stat, no) {
   const stamp = div().flex_none().px(3).border(2).border_color(stampColor).bg(`${stampColor}1a`)
     .text_size(12).text_color(stampColor).child(stampText);
 
-  // 虚线分隔
+  // Dashed rule
   const dashes = h_flex().w_full().gap(3).overflow_hidden()
     .children(Array.from({ length: 30 }, () => div().w(3).h(1).flex_none().bg(P.line)));
 
@@ -229,16 +229,16 @@ function card(t, a, mid, tab, now, dmg, stat, no) {
     .child(h_flex().gap(6).items_center()
       .child(photo)
       .child(v_flex().flex_1().min_w(0).gap(1)
-        .child(field("代号", m.name))
-        .child(field("程序", progName(a)))
-        .child(field("驻地", place(a)))))
+        .child(field("Name", m.name))
+        .child(field("App", progName(a)))
+        .child(field("Base", place(a)))))
     .child(dashes)
-    .child(field("任务", what || "未登记", what ? P.ink : P.label))
-    .child(field("状况", time || QUIP[a.status] || QUIP.idle))
-    .child(field("损坏", slot != null ? damageBar(t, dmg ?? 0, P) : div().text_size(12).text_color(P.label).child("场外")))
-    .child(field("战绩", `拆 ${stat?.razed ?? 0} 栋 · 今天 ${dur(workTime(stat, now))}`));
+    .child(field("Task", what || "none", what ? P.ink : P.label))
+    .child(field("Now", time || QUIP[a.status] || QUIP.idle))
+    .child(field("Dmg", slot != null ? damageBar(t, dmg ?? 0, P) : div().text_size(12).text_color(P.label).child("Offsite")))
+    .child(field("Score", `${stat?.razed ?? 0} razed · today ${dur(workTime(stat, now))}`));
 
-  // 文件夹标签
+  // Folder tab
   const folderTab = h_flex().child(div().h(16).px(6).flex().items_center().bg(P.tab).border(2).border_b(0).border_color(edge)
     .text_size(12).text_color(P.ink).child(`No.${String(no).padStart(3, "0")}`));
 
@@ -248,32 +248,32 @@ function card(t, a, mid, tab, now, dmg, stat, no) {
     .on_click(() => run("pane.focus", { pane: a.pane }))
     .child(folderTab)
     .child(div().relative().pr(3).pb(3)
-      // 像素硬阴影
+      // Hard pixel shadow
       .child(div().absolute().left(3).top(3).right(0).bottom(0).bg(shadow))
       .child(body.hover((st) => st.border_color(t.input))));
 }
 
-// 头像模式的小方块：白边照片里一个 48 头像，边框是状态色；细节在悬停提示里
+// Avatar-mode tile: a 48px face in a white photo frame, border in the status color; details in the tooltip
 function tile(t, a, mid, what) {
   const P = paperOf(t);
   const m = monsterOf(mid);
   const edge = a.focused ? t.input : BADGE[a.status] ?? P.line;
   return div().id(`tile-${a.address}`).relative().flex_none().pr(2).pb(2).cursor_pointer()
-    .tooltip(`${m.name} · ${progName(a)} · ${STATUS_TEXT[a.status] ?? "睡觉中"}${what ? ` · ${what}` : ""}`)
+    .tooltip(`${m.name} · ${progName(a)} · ${STATUS_TEXT[a.status] ?? "Asleep"}${what ? ` · ${what}` : ""}`)
     .on_mouse_down("left", stop)
     .on_click(() => run("pane.focus", { pane: a.pane }))
     .child(div().absolute().left(2).top(2).right(0).bottom(0).bg(shadowColor(t)))
-    // 56 = 2px 状态色边框 + 2px 白边 + 48 头像
+    // 56 = 2px status border + 2px white border + 48 face
     .child(div().size(56).bg(P.photo).border(2).border_color(edge).p(2)
       .hover((st) => st.border_color(t.input))
       .child(avatarBox(t, a, m, `tava-${a.address}`)));
 }
 
-// 名册显示模式：file = 档案卡（大）、mini = 头像小方块；存在 shared 里，重启不丢
+// Roster mode: file = dossier cards (large), mini = avatar tiles; kept in shared, survives restarts
 const MODE = "kaiju.roster";
 const miniMode = () => (props()?.demo?.mode ?? shared(MODE)) === "mini";
 
-// props().demo.spaces：截图用，名册只列这些名字的 space（不露出其他 space）
+// props().demo.spaces: for screenshots, the roster lists only spaces with these names
 const listed = () => {
   const only = props()?.demo?.spaces;
   return only ? spaces().filter((s) => only.includes(s.name)) : spaces();
@@ -284,7 +284,7 @@ function spaceHeader(t, s, i) {
   return h_flex().id(`sp-${s.id}`).h(28).px(6).gap(8).flex_none().items_center().cursor_pointer()
     .when(s.active, (el) => el.bg(t.selected))
     .when(!s.active, (el) => el.hover((st) => st.bg(t.hover)))
-    .tooltip(slot == null ? `${s.name}（不在沙盘上）` : s.name)
+    .tooltip(slot == null ? `${s.name} (not in the city)` : s.name)
     .on_mouse_down("left", stop)
     .on_click(() => run("space.select", { id: s.id }))
     .on_mouse_down("right", spaceMenu(s))
@@ -303,7 +303,7 @@ export function roster(view, t, cx) {
   const now = Date.now();
   const tabs = new Map(spaces().flatMap((s) => s.tabs.map((tb) => [tb.id, tb])));
   const damage = shared("kaiju.damage") ?? {};
-  // 有怪兽在拆楼时，每到整分钟重绘一次刷新计时；没人干活就不预约（不做周期性重绘）
+  // While a monster is smashing, redraw at each whole minute to refresh timers; nothing scheduled when nobody works
   if (list.some((a) => a.status === "working") && !view.tick) {
     view.tick = true;
     cx.timer.after(60000 - (now % 60000) + 50, (cx) => { view.tick = false; cx.notify(); });
@@ -329,14 +329,14 @@ export function roster(view, t, cx) {
     return v_flex().size_full().items_center().pt(lights ? 50 : 12).pb(12).gap(6)
       .child(v_flex().id("rail-list").flex_1().min_h(0).w_full().items_center().gap(6).overflow_y_scrollbar()
         .children(spaces().map(railTile)))
-      .child(button(t, "rail-new", "mods/workspace-chrome/plus.svg", "新建 space", () => run("space.new")))
-      .child(button(t, "rail-settings", "mods/workspace-chrome/settings.svg", "设置", () => run("app.settings")))
-      .child(button(t, "rail-open", "mods/workspace-chrome/chevron-right.svg", "展开（⌘B）", toggleSidebar));
+      .child(button(t, "rail-new", "mods/workspace-chrome/plus.svg", "New space", () => run("space.new")))
+      .child(button(t, "rail-settings", "mods/workspace-chrome/settings.svg", "Settings", () => run("app.settings")))
+      .child(button(t, "rail-open", "mods/workspace-chrome/chevron-right.svg", "Expand (⌘B)", toggleSidebar));
   }
 
-  // 档案编号 = Agent 在列表里的顺序
+  // File number = the agent's position in the list
   const no = new Map(list.map((a, k) => [a.address, k + 1]));
-  // 每个 space 下的档案卡两列排
+  // Dossier cards under each space, two per row
   const mini = miniMode();
   const groups = listed().map((s) => {
     const i = spaces().findIndex((x) => x.id === s.id);
@@ -350,13 +350,13 @@ export function roster(view, t, cx) {
   });
   return v_flex().size_full().px(10).pb(8)
     .child(h_flex().h(26).flex_none().items_center().justify_between()
-      .child(div().text_size(12).text_color(t.dim).child("怪兽名册"))
+      .child(div().text_size(12).text_color(t.dim).child("Monster Roster"))
       .child(h_flex().gap(2)
         .child(button(t, "ros-mode", mini ? "mods/kaiju/icons/file.svg" : "mods/kaiju/icons/grid.svg",
-          mini ? "展开成档案卡" : "折叠成头像", () => setShared(MODE, mini ? "file" : "mini")))
-        .child(button(t, "ros-new", "mods/workspace-chrome/plus.svg", "新建 space", () => run("space.new")))
-        .child(button(t, "ros-close", "mods/workspace-chrome/chevron-left.svg", "收起（⌘B）", toggleSidebar))))
+          mini ? "Show dossier cards" : "Show avatars", () => setShared(MODE, mini ? "file" : "mini")))
+        .child(button(t, "ros-new", "mods/workspace-chrome/plus.svg", "New space", () => run("space.new")))
+        .child(button(t, "ros-close", "mods/workspace-chrome/chevron-left.svg", "Collapse (⌘B)", toggleSidebar))))
     .child(v_flex().id("ros-list").flex_1().min_h(0).gap(10).overflow_y_scrollbar()
       .children(groups)
-      .when(list.length === 0, (el) => el.child(div().px(6).py(4).text_size(12).text_color(t.dim).child("还没有运行中的 Agent"))));
+      .when(list.length === 0, (el) => el.child(div().px(6).py(4).text_size(12).text_color(t.dim).child("No running agents yet"))));
 }

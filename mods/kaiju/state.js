@@ -1,29 +1,29 @@
-// Kaiju City 的纯逻辑：素材路径、昼夜判断、space→楼位映射、楼的损坏程度
+// Kaiju City pure logic: asset paths, day/night, space -> slot mapping, building damage
 import { spaces, shared, setShared } from "herdr";
 import M from "./manifest.js";
 
 const ASSETS = "mods/kaiju/assets";
 const MIN = 60 * 1000;
-// 连续 working 多久升一级损坏
+// How long of continuous working raises damage one level
 export const LIGHT_AFTER = 2 * MIN;
 export const HEAVY_AFTER = 8 * MIN;
-// 回到 idle 后每级修复间隔
+// Repair interval per level after going back to idle
 export const REPAIR_STEP = 650;
 
-// 主题背景色偏暗 → 夜景素材
+// Dark theme background -> night art
 export function isNight(t) {
   const hex = (t.background ?? "#ffffff").slice(1);
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
   return 0.299 * r + 0.587 * g + 0.114 * b < 110;
 }
 
-// 像素硬阴影的颜色
+// Hard pixel shadow color
 export const shadowColor = (t) => (isNight(t) ? "#00000099" : "#2b262033");
 
-// 状态 → 头像表情帧
+// Status -> face frame
 export const FACE = { idle: "idle", working: "smash", done: "roar", blocked: "wave" };
 
-// 在布局树里按 id 找节点
+// Find a node by id in the layout tree
 export function find(node, id) {
   if (node?.id === id) return node;
   for (const child of node?.children ?? []) {
@@ -35,7 +35,7 @@ export function find(node, id) {
 
 export const asset = (t, name) => `${ASSETS}/${isNight(t) ? "night" : "day"}/${name}`;
 
-// space 按顺序占前 8 个楼位；之后的不上沙盘
+// Spaces take the first 8 slots in order; later ones aren't in the city
 export function slotOf(spaceId) {
   const i = spaces().findIndex((s) => s.id === spaceId);
   return i >= 0 && i < M.slots.length ? i : null;
@@ -43,14 +43,14 @@ export function slotOf(spaceId) {
 
 export const slotColor = (i) => (i != null && M.slots[i] ? M.slots[i].color : "#9b958c");
 
-// space 里最早开始 working 的时间
+// Earliest working start time in a space
 const workingSince = (s) => {
   const ts = s.tabs.map((t) => t.working_since).filter((v) => v != null);
   return ts.length ? Math.min(...ts) : null;
 };
 
-// 按 space 里各 Agent 的状态算出「应有」的损坏程度（不用 space.status：blocked 会盖过 done）：
-// 有 done = 3（废墟）；有 working 按时长 0/1/2；只有 blocked 保持现状；其余目标为 0（由 Damage 逐级修复）
+// Target damage from the statuses of a space's agents (not space.status: blocked would hide done):
+// any done = 3 (ruin); working by duration 0/1/2; only blocked keeps the level; otherwise 0 (Damage repairs step by step)
 function target(s, st, now, prev) {
   if (st.has("done")) return 3;
   if (st.has("working")) {
@@ -62,15 +62,15 @@ function target(s, st, now, prev) {
   return 0;
 }
 
-// 每个 space 当前的损坏程度；需要随时间变化时用一次性 timer.after 唤醒重绘（不用 every）
+// Current damage per space; time-based changes wake a redraw with one-shot timer.after (never every)
 export class Damage {
   constructor() {
     this.level = new Map();
     this.wakeAt = Infinity;
   }
 
-  // 返回 Map<spaceId, 0..3>，并按需预约下一次重绘
-  // list：当前 Agent 列表（agents() 或演示数据）
+  // Returns Map<spaceId, 0..3> and schedules the next redraw when needed
+  // list: current agents (agents() or demo data)
   update(cx, list) {
     const now = Date.now();
     const bySpace = new Map();
@@ -87,7 +87,7 @@ export class Damage {
       const want = target(s, st, now, prev);
       let cur = want;
       if (want < prev && !st.has("working")) {
-        // 修复：一级一级降，每级 REPAIR_STEP
+        // Repair: drop one level at a time, REPAIR_STEP each
         const at = this.repairAt?.get(s.id);
         if (at == null) {
           (this.repairAt ??= new Map()).set(s.id, now + REPAIR_STEP);
@@ -113,7 +113,7 @@ export class Damage {
       this.level.set(s.id, cur);
     }
     for (const id of [...this.level.keys()]) if (!live.has(id)) this.level.delete(id);
-    // 只在比已预约的更早时才再预约一次
+    // Only schedule again when earlier than the pending one
     if (next < Infinity && next < this.wakeAt) {
       this.wakeAt = next;
       cx.timer.after(Math.max(16, next - now + 20), (cx) => {
@@ -125,13 +125,13 @@ export class Damage {
   }
 }
 
-// ---------- 怪兽 ----------
-export const STATUS_TEXT = { idle: "睡觉中", working: "拆楼中", done: "拆完了", blocked: "等你" };
+// ---------- Monsters ----------
+export const STATUS_TEXT = { idle: "Asleep", working: "Smashing", done: "Razed", blocked: "Waiting" };
 const MODE = { working: "smash", done: "roar", blocked: "wave" };
 const BUBBLE = { roar: "bang", wave: "question" };
 const KEY = "kaiju.monsters";
 
-// Agent 按出现顺序依次分配阵容里的怪兽，循环使用；存在 shared 里，各部件看到同一只
+// Agents get roster monsters in order of appearance, cycling; kept in shared so every part sees the same one
 export function assign(list) {
   const old = shared(KEY) ?? { map: {}, n: 0 };
   const map = {};
@@ -152,8 +152,8 @@ export function assign(list) {
 
 export const monsterOf = (id) => M.monsters.find((m) => m.id === id) ?? M.monsters[0];
 
-// 每只出场怪兽在沙盘里的去处：mode（smash/roar/wave）、脚底位置 spot、所属楼位 slot、头顶气泡
-// idle 或所属 space 不在沙盘上的：slot = null，不出场
+// Where each visible monster goes: mode (smash/roar/wave), foot position spot, slot, head bubble
+// idle, or space not in the city: slot = null, not shown
 export function behaviors(list) {
   const out = new Map();
   const perSlot = new Map();
@@ -166,7 +166,7 @@ export function behaviors(list) {
     }
     const k = perSlot.get(slot) ?? 0;
     perSlot.set(slot, k + 1);
-    // 每栋楼有 2~4 个站位；更多的怪兽轮流用这些站位，每轮往画面前方（下方）挪一点
+    // Each building has 2-4 stands; extra monsters reuse them, each round a bit further forward (down)
     const st = M.slots[slot].stand;
     const p = st[k % st.length];
     const round = Math.floor(k / st.length);

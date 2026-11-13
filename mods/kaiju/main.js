@@ -1,9 +1,9 @@
-// Kaiju City 布局的部件分发，由 props() 决定画哪个：
-//   city：左上城市沙盘（space = 楼，Agent = 怪兽），见 city.js
-//   roster：左下怪兽名册卡片；侧栏收起时画窄栏，见 roster.js
-//   top：顶栏胶囊 + tab 胶囊
-//   news：右下怪兽快讯
-//   窗格头部：props 带 pane 时
+// Part dispatch for the Kaiju City layout; props() picks what to draw:
+//   city: top-left city diorama (space = building, agent = monster), see city.js
+//   roster: bottom-left monster roster cards; a narrow rail when the sidebar is collapsed, see roster.js
+//   top: top bar space capsule + tab pills
+//   news: bottom-right kaiju news
+//   pane header: when props has pane
 
 import { View, div } from "gpui-kit";
 import { props, theme, nextCommand } from "herdr";
@@ -17,7 +17,7 @@ import { news } from "./news.js";
 export default class Kaiju extends View {
   init(_props, cx) {
     this.damage = new Damage();
-    // 只有名册这一份接快捷键命令（keys.json: "cmd-b": "kaiju.toggle"），避免多份抢命令
+    // Only the roster copy takes key commands (keys.json: "cmd-b": "kaiju.toggle") so copies don't compete
     if (props()?.part === "roster") {
       cx.spawn(async (cx) => {
         for (;;) {

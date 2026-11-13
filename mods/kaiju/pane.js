@@ -1,4 +1,4 @@
-// 窗格头部 28px：怪兽头像（或砖头）+ 程序名 + 目录（~ 缩写）；等你时有标签；悬停出现分屏 / 放大 / 关闭
+// 28px pane header: monster head (or brick) + program name + folder (~ for home); a tag when waiting; split / zoom / close on hover
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, agents, props, run, home } from "herdr";
@@ -8,7 +8,8 @@ import { BADGE } from "./roster.js";
 function folder(cwd) {
   if (!cwd) return "";
   const h = home();
-  return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
+  // "/" on macOS/Linux, "\" on Windows
+  return cwd === h ? "~" : cwd.startsWith(h) && "/\\".includes(cwd[h.length]) ? "~" + cwd.slice(h.length) : cwd;
 }
 
 export function paneHeader(view, t) {
@@ -30,7 +31,7 @@ export function paneHeader(view, t) {
     .child(headIcon(t, a))
     .child(div().flex_none().max_w(260).truncate().text_color(t.foreground).child(name))
     .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(folder(p.cwd)))
-    .when(p.status === "blocked", (el) => el.child(div().flex_none().px(4).bg(BADGE.blocked).text_color("#2b2620").child("等你")))
+    .when(p.status === "blocked", (el) => el.child(div().flex_none().px(4).bg(BADGE.blocked).text_color("#2b2620").child("Waiting")))
     .when(hovered, (el) => el
       .child(button(`kh-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
       .child(button(`kh-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))

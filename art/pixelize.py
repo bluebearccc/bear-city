@@ -1,26 +1,26 @@
-# AI 动作表 → 像素精灵帧
-# 用法：python3 -I art/pixelize.py <动作表.png> <输出目录> [目标高度=56] [颜色数=20] [--poses N]
-# 步骤：去白底 → 按列间空白切出每个姿势 → 统一缩放到目标高度 → 统一调色板 → 1 像素描边
+# AI sprite sheet -> pixel sprite frames
+# Usage: python3 -I art/pixelize.py <sheet.png> <out_dir> [height=56] [colors=20] [--poses N]
+# Steps: remove white background -> cut poses at blank columns -> scale to the target height -> shared palette -> 1 px outline
 import os, sys
 import numpy as np
 from PIL import Image
 
-# 位置参数（去掉 --native、--poses N 这类选项）
+# positional args (without options like --native, --poses N)
 pos = [a for i, a in enumerate(sys.argv) if not a.startswith("--") and sys.argv[i - 1] != "--poses"]
 src, out = pos[1], pos[2]
 TARGET_H = int(pos[3]) if len(pos) > 3 else 56
 COLORS = int(pos[4]) if len(pos) > 4 else 32
-# 源图本身是像素画时：按像素格中心直接取色、不额外描边（--native）
+# when the source is already pixel art: sample each cell center, no extra outline (--native)
 NATIVE = "--native" in sys.argv
 os.makedirs(out, exist_ok=True)
 
 im = Image.open(src).convert("RGB")
 a = np.asarray(im).astype(int)
-# 白底判定：接近白色且低饱和
+# white background: near white and low saturation
 bright = a.min(axis=2)
 spread = a.max(axis=2) - a.min(axis=2)
 white = (bright > 232) & (spread < 18)
-# 只有从图片边缘连通过来的白色才是背景（角色身上被描边围住的白毛、白肚皮、高光保留）
+# only white connected to the image edge is background (white fur, bellies and highlights inside the outline stay)
 from PIL import ImageDraw
 wm = Image.fromarray((white * 255).astype(np.uint8)).copy()
 H_, W_ = white.shape
@@ -29,7 +29,7 @@ for x, y in [(x, 0) for x in range(W_)] + [(x, H_ - 1) for x in range(W_)] + [(0
         ImageDraw.floodfill(wm, (x, y), 128)
 fg = np.array(wm) != 128
 
-# 按列切：连续前景列构成一个姿势，间隙不超过 gap 的合并
+# cut by columns: a run of foreground columns is one pose, gaps up to gap are merged
 cols = fg.sum(axis=0) > max(2, fg.shape[0] * 0.004)
 
 def split(gap):
@@ -48,26 +48,26 @@ def split(gap):
         spans.append((start, len(cols) - 1))
     return [s for s in spans if s[1] - s[0] > im.width * 0.03]
 
-# --poses N：已知姿势数时，间隙阈值自动调整到正好切出 N 段（姿势间空白很窄、或姿势内部有空隙都能处理）
+# --poses N: with a known pose count, tune the gap threshold to get exactly N pieces (handles narrow gaps between poses and gaps inside a pose)
 POSES = int(sys.argv[sys.argv.index("--poses") + 1]) if "--poses" in sys.argv else None
 gap = max(8, im.width // 120)
 spans = split(gap)
 if POSES and len(spans) != POSES:
-    # 段数不对时，间隙阈值从默认值往两边找（太多段 → 调大合并，太少段 → 调小切开）
+    # wrong count: search the gap threshold both ways from the default (too many -> larger to merge, too few -> smaller to split)
     for g in sorted(range(0, 120), key=lambda g: abs(g - gap)):
         if len(split(g)) == POSES:
             gap, spans = g, split(g)
             break
 
-# 每个姿势的上下边界
+# top and bottom of each pose
 boxes = []
 for x0, x1 in spans:
     rows = np.where(fg[:, x0:x1 + 1].sum(axis=1) > 0)[0]
     boxes.append((x0, rows.min(), x1 + 1, rows.max() + 1))
 if not boxes:
-    sys.exit("没找到姿势")
+    sys.exit("no poses found")
 
-# 统一缩放比例：以最高姿势对齐目标高度，保证各帧角色大小一致
+# one scale for all: the tallest pose fits the target height so every frame has the same size
 hmax = max(b[3] - b[1] for b in boxes)
 k = TARGET_H / hmax
 
@@ -80,7 +80,7 @@ for (x0, y0, x1, y1) in boxes:
     m = np.asarray(mask.resize((w, h), Image.BOX)) > 110
     frames.append((small, m))
 
-# 统一调色板：所有帧拼起来一起量化
+# shared palette: quantize all frames together
 strip_w = sum(f[0].width for f in frames)
 strip = Image.new("RGB", (strip_w, TARGET_H), (255, 255, 255))
 x = 0
@@ -93,11 +93,11 @@ for i, (s, m) in enumerate(frames):
     rgba = np.zeros((s.height + 2, s.width + 2, 4), dtype=np.uint8)
     rgba[1:-1, 1:-1, :3] = q
     rgba[1:-1, 1:-1, 3] = np.where(m, 255, 0)
-    # 1 像素描边：透明像素挨着角色 → 取相邻最暗色再压暗
+    # 1 px outline: a transparent pixel next to the character takes the darkest neighbor, darkened
     al = rgba[:, :, 3] > 0
     outl = rgba.copy()
     if NATIVE:
-        # 清掉白底残留：紧邻透明区的近白像素删掉，两遍
+        # remove leftover white: delete near-white pixels next to transparency, two passes
         for _ in range(2):
             al = outl[:, :, 3] > 0
             rgb = outl[:, :, :3].astype(int)

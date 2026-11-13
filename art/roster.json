@@ -1,42 +1,42 @@
 [
   {
     "id": "lizard",
-    "name": "巨蜥",
+    "name": "Lizard",
     "sheet": "art/ai/codex-lizard/lizard-sheet.png"
   },
   {
     "id": "ape",
-    "name": "巨猿",
+    "name": "Ape",
     "sheet": "art/ai/codex-ape/ape-sheet.png"
   },
   {
     "id": "crab",
-    "name": "巨蟹",
+    "name": "Crab",
     "sheet": "art/ai/cand-crab/crab-sheet.png"
   },
   {
     "id": "axolotl",
-    "name": "美西螈",
+    "name": "Axolotl",
     "sheet": "art/ai/cand-axolotl/axolotl-sheet.png"
   },
   {
     "id": "yeti",
-    "name": "雪怪",
+    "name": "Yeti",
     "sheet": "art/ai/cand-yeti/yeti-sheet.png"
   },
   {
     "id": "moth",
-    "name": "巨蛾",
+    "name": "Moth",
     "sheet": "art/ai/cand-moth/moth-sheet.png"
   },
   {
     "id": "turtle",
-    "name": "巨龟",
+    "name": "Turtle",
     "sheet": "art/ai/cand-turtle/turtle-sheet.png"
   },
   {
     "id": "bat",
-    "name": "巨蝠",
+    "name": "Bat",
     "sheet": "art/ai/cand-bat/bat-sheet.png"
   }
 ]

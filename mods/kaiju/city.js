@@ -1,10 +1,10 @@
-// 城市沙盘：底座 + 8 个楼位（space = 楼）+ 怪兽（Agent），当前楼顶浮动箭头
-//   点楼切换 space，点怪兽跳到它的窗格
+// City diorama: plate + 8 building slots (space = building) + monsters (agents); a floating arrow over the current roof
+//   click a building to switch space, click a monster to jump to its pane
 import { div, image } from "gpui-kit";
 import { spaces, agents, setAgentOrder, run, props, shared, setShared } from "herdr";
 import M from "./manifest.js";
 import { asset, assign, behaviors, monsterOf, STATUS_TEXT } from "./state.js";
-// 怪兽和楼按前后关系叠放；出场的只有 working / done / blocked
+// Monsters and buildings are stacked by depth; only working / done / blocked monsters appear
 
 const W = M.canvas.w;
 const H = M.canvas.h;
@@ -12,7 +12,7 @@ const SP = M.sprite;
 const RISE = 40;
 const WALK = 900;
 
-// 各楼损坏程度写进共享状态，名册卡片读它画损坏进度条；只在有变化时写
+// Write each building's damage into shared state for the roster's damage bar; only when it changes
 function shareDamage(level) {
   const obj = Object.fromEntries(level);
   const old = shared("kaiju.damage") ?? {};
@@ -20,7 +20,7 @@ function shareDamage(level) {
   if (!same) setShared("kaiju.damage", obj);
 }
 
-// 一张全画布图层
+// One full-canvas layer
 const layer = (t, name) => image(asset(t, name)).absolute().left(0).top(0).w(W).h(H);
 
 const fx = (t, name) => {
@@ -28,7 +28,7 @@ const fx = (t, name) => {
   return image(asset(t, M.fx[name])).w(w).h(h);
 };
 
-// 记录见过的 space：新出现的楼从地面升起（第一次渲染时已有的不算）
+// Remember seen spaces: a new building rises from the ground (ones present on first render don't)
 function rising(view, list, cx) {
   const c = (view.city ??= { known: null, rising: new Set() });
   const ids = list.map((s) => s.id);
@@ -39,17 +39,17 @@ function rising(view, list, cx) {
   const fresh = ids.filter((id) => !c.known.has(id));
   if (fresh.length) {
     fresh.forEach((id) => { c.known.add(id); c.rising.add(id); });
-    // 先画在低处，下一帧回到原位，spring 带出升起
+    // Draw it low first, back in place next frame; the spring makes it rise
     cx.timer.after(40, (cx) => { c.rising.clear(); cx.notify(); });
   }
   for (const id of [...c.known]) if (!ids.includes(id)) c.known.delete(id);
   return c.rising;
 }
 
-// 怪兽出场 / 移动 / 退场：
-//   新出场的先画在海边入场点，40ms 后改到站位，transition 走过去（途中走路帧）
-//   位置变了同样走过去；不再出场（回到 idle 或消失）的走回入场点，到达后移除
-//   全部用一次性 timer.after 唤醒，不用 every
+// Monster enter / move / leave:
+//   a new one is drawn at the sea entry point, moved to its stand after 40ms, and the transition walks it there (walk frame)
+//   a changed position walks the same way; one that no longer appears (idle or gone) walks back to the entry and is removed on arrival
+//   all wake-ups use one-shot timer.after, never every
 function moves(view, active, beh, cx) {
   const st = (view.walk ??= { map: new Map(), init: false });
   const now = Date.now();
@@ -63,7 +63,7 @@ function moves(view, active, beh, cx) {
     live.add(a.address);
     let e = st.map.get(a.address);
     if (!e || e.leaving) {
-      // 第一次渲染时已在干活的直接站好，不演入场
+      // Already working on first render: stand in place, no entrance
       e = { x: b.spot.x, y: b.spot.y, until: 0, enter: st.init, leaving: false };
       if (e.enter) enter = true;
       st.map.set(a.address, e);
@@ -93,7 +93,7 @@ function moves(view, active, beh, cx) {
   return out;
 }
 
-// props().demo.agents：截图检查用的假 Agent，[{address, space: 序号, status, name}]
+// props().demo.agents: fake agents for screenshot checks, [{address, space: index, status, name}]
 function agentList() {
   const demo = props()?.demo?.agents;
   if (!demo) return agents();
@@ -133,10 +133,10 @@ export function city(view, t, cx) {
 
   if (!demo?.agents) setAgentOrder(ags.map((a) => a.address));
   const mids = assign(ags);
-  // 只有 working / done / blocked 且所属 space 在沙盘上的怪兽出场；idle 待在名册卡片里
+  // Only working / done / blocked monsters whose space is in the city appear; idle ones stay in the roster
   const beh = behaviors(ags);
   const shown = moves(view, ags.filter((a) => beh.get(a.address).slot != null), beh, cx);
-  // 每个楼位前的怪兽状态：有拆楼的 → 楼震动 + 烟尘；有等你的 → 楼顶警报灯
+  // Monster state per slot: smashing -> building shakes + dust; waiting -> roof siren
   const smashing = new Set();
   const waiting = new Set();
   for (const { b, walking } of shown) {
@@ -145,11 +145,11 @@ export function city(view, t, cx) {
     if (b.mode === "wave") waiting.add(b.slot);
   }
 
-  // 楼和怪兽按真实前后关系从后往前叠：站位的 depth 已算好（挡住它的楼在前、被它挡的楼在后），怪兽脚踏实地
+  // Buildings and monsters stack back to front by real depth: stand depth is precomputed (buildings hiding it come after, buildings it hides come before), feet on the ground
   const items = [];
   for (const s of M.slots) items.push({ depth: s.depth, order: 0, slot: s });
-  // 走路中的怪兽（入场、换位、退场）路线横穿街区，画在最上层，免得半路钻进楼后面
-  // 深度相同时，脚在画面上更低的（更靠前）后画
+  // Walking monsters (enter, move, leave) cross blocks, so draw them on top to avoid ducking behind buildings mid-walk
+  // Same depth: feet lower on screen (further forward) draw later
   for (const it of shown) items.push({ depth: it.walking ? Infinity : it.pos.depth, order: 1, y: it.pos.y, mon: it });
   items.sort((x, y) => x.depth - y.depth || x.order - y.order || (x.y ?? 0) - (y.y ?? 0));
 
@@ -166,7 +166,7 @@ export function city(view, t, cx) {
       continue;
     }
     const dmg = dmgOf(sp, s);
-    // 楼裁在自己底边以上，升起时不会露到地面下方
+    // Clip the building above its own base so it doesn't show below ground while rising
     const bottom = s.hit.y + s.hit.h;
     let img = image(asset(t, s.layers[dmg])).absolute().left(0).w(W).h(H)
       .top(up.has(sp.id) ? RISE : 0).spring("top", { response: 520, damping: 0.62 });
@@ -185,7 +185,7 @@ export function city(view, t, cx) {
     }
   }
 
-  // 当前 space 楼顶上方的浮动箭头
+  // Floating arrow above the current space's roof
   const cur = list.findIndex((s) => s.active);
   if (cur >= 0 && cur < M.slots.length) {
     const s = M.slots[cur];
@@ -198,7 +198,7 @@ export function city(view, t, cx) {
         .child(fx(t, "arrow"))));
   }
 
-  // 点击区域：和画面同样的前后顺序叠放（挡在怪兽前面的楼优先），走路中的怪兽不可点
+  // Click areas stack in the same order as the picture (a building in front of a monster wins); walking monsters aren't clickable
   const stop = (_e, cx) => cx.stop_propagation();
   for (const it of items) {
     if (it.mon) {

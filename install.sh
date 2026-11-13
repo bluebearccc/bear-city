@@ -1,5 +1,5 @@
 #!/bin/sh
-# 安装 kaiju 布局到 Herdr GUI 配置目录（只覆盖本布局自己的文件）
+# Install the kaiju layout into the Herdr GUI config folder (overwrites only this layout's own files)
 set -e
 cd "$(dirname "$0")"
 H="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
@@ -8,7 +8,7 @@ cp layouts/kaiju.json layouts/kaiju.svg "$H/layouts/"
 cp themes/kaiju.json themes/kaiju-night.json "$H/themes/"
 rsync -a --delete --exclude jsconfig.json --exclude '*.d.ts' mods/kaiju/ "$H/mods/kaiju/"
 
-# 合并布局附带的快捷键；已有同名键且不同 → 询问，默认不覆盖
+# Merge the layout's key bindings; if a key is already bound to something else, ask (default: keep it)
 python3 -I - "$H/keys.json" mods/kaiju/keys.json <<'EOF'
 import json, os, shutil, sys, time
 dst, src = sys.argv[1], sys.argv[2]
@@ -21,13 +21,13 @@ for section, binds in mine.items():
         if sec.get(key) == action:
             continue
         if key in sec:
-            print(f"[{section}] {key} 已绑定为 {sec[key]}，改成 {action}？[y/N] ", end="", flush=True)
+            print(f"[{section}] {key} is bound to {sec[key]}, change it to {action}? [y/N] ", end="", flush=True)
             try:
                 reply = open("/dev/tty").readline().strip().lower()
             except OSError:
                 reply = ""
             if reply != "y":
-                print("保留原绑定")
+                print("keeping the existing binding")
                 continue
         sec[key] = action
         changed = True
@@ -35,6 +35,6 @@ if changed:
     if os.path.exists(dst):
         shutil.copy(dst, f"{dst}.bak-{time.strftime('%Y%m%d%H%M%S')}")
     json.dump(cur, open(dst, "w"), indent=2, ensure_ascii=False)
-    print("keys.json 已合并 kaiju 快捷键")
+    print("merged kaiju keys into keys.json")
 EOF
 echo "installed to $H"

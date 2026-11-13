@@ -348,7 +348,7 @@
  "monsters": [
   {
    "id": "lizard",
-   "name": "巨蜥",
+   "name": "Lizard",
    "frames": {
     "idle": "monsters/lizard/idle.png",
     "walk": "monsters/lizard/walk.png",
@@ -376,7 +376,7 @@
   },
   {
    "id": "ape",
-   "name": "巨猿",
+   "name": "Ape",
    "frames": {
     "idle": "monsters/ape/idle.png",
     "walk": "monsters/ape/walk.png",
@@ -404,7 +404,7 @@
   },
   {
    "id": "crab",
-   "name": "巨蟹",
+   "name": "Crab",
    "frames": {
     "idle": "monsters/crab/idle.png",
     "walk": "monsters/crab/walk.png",
@@ -432,7 +432,7 @@
   },
   {
    "id": "axolotl",
-   "name": "美西螈",
+   "name": "Axolotl",
    "frames": {
     "idle": "monsters/axolotl/idle.png",
     "walk": "monsters/axolotl/walk.png",
@@ -460,7 +460,7 @@
   },
   {
    "id": "yeti",
-   "name": "雪怪",
+   "name": "Yeti",
    "frames": {
     "idle": "monsters/yeti/idle.png",
     "walk": "monsters/yeti/walk.png",
@@ -488,7 +488,7 @@
   },
   {
    "id": "moth",
-   "name": "巨蛾",
+   "name": "Moth",
    "frames": {
     "idle": "monsters/moth/idle.png",
     "walk": "monsters/moth/walk.png",
@@ -516,7 +516,7 @@
   },
   {
    "id": "turtle",
-   "name": "巨龟",
+   "name": "Turtle",
    "frames": {
     "idle": "monsters/turtle/idle.png",
     "walk": "monsters/turtle/walk.png",
@@ -544,7 +544,7 @@
   },
   {
    "id": "bat",
-   "name": "巨蝠",
+   "name": "Bat",
    "frames": {
     "idle": "monsters/bat/idle.png",
     "walk": "monsters/bat/walk.png",
