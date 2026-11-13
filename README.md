@@ -6,7 +6,7 @@ An isometric pixel-art layout for [Herdr](https://herdr.dev). A little city sits
 
 ## Features
 
-- 8 buildings and 8 original monsters (Lizard, Ape, Crab, Axolotl, Yeti, Moth, Turtle, Bat)
+- 8 buildings and 9 original monsters (Lizard, Ape, Octopus, Crab, Axolotl, Yeti, Moth, Turtle, Bat)
 - Buildings take damage the longer an agent works, and repair after you look
 - Roster of dossier cards (task, timer, damage, record) or small avatars
 - Top capsule and tabs with monster heads; pane headers with program and folder

@@ -403,6 +403,34 @@
    "face": "monsters/ape/face-roar.png"
   },
   {
+   "id": "octopus",
+   "name": "Octopus",
+   "frames": {
+    "idle": "monsters/octopus/idle.png",
+    "walk": "monsters/octopus/walk.png",
+    "smash": "monsters/octopus/smash.png",
+    "roar": "monsters/octopus/roar.png",
+    "wave": "monsters/octopus/wave.png",
+    "head": "monsters/octopus/head-idle.png"
+   },
+   "heads": {
+    "idle": "monsters/octopus/head-idle.png",
+    "walk": "monsters/octopus/head-walk.png",
+    "smash": "monsters/octopus/head-smash.png",
+    "roar": "monsters/octopus/head-roar.png",
+    "wave": "monsters/octopus/head-wave.png"
+   },
+   "top": 3,
+   "avatars": {
+    "idle": "monsters/octopus/avatar-idle.png",
+    "walk": "monsters/octopus/avatar-walk.png",
+    "smash": "monsters/octopus/avatar-smash.png",
+    "roar": "monsters/octopus/avatar-roar.png",
+    "wave": "monsters/octopus/avatar-wave.png"
+   },
+   "face": "monsters/octopus/face-roar.png"
+  },
+  {
    "id": "crab",
    "name": "Crab",
    "frames": {

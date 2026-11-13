@@ -10,6 +10,11 @@
     "sheet": "art/ai/codex-ape/ape-sheet.png"
   },
   {
+    "id": "octopus",
+    "name": "Octopus",
+    "sheet": "art/ai/cand-octopus/octopus-sheet.png"
+  },
+  {
     "id": "crab",
     "name": "Crab",
     "sheet": "art/ai/cand-crab/crab-sheet.png"
